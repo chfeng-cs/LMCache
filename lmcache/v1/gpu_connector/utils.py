@@ -32,6 +32,13 @@ if TYPE_CHECKING:
 # First Party
 import lmcache.c_ops as lmc_ops
 
+# Compatibility shim: c_ops compiled before the enum rename uses NBBS;
+# newer source uses NB_BS. Alias whichever is missing so both names work.
+if not hasattr(lmc_ops.GPUKVFormat, "TWO_X_NL_X_NB_BS_NH_HS") and \
+        hasattr(lmc_ops.GPUKVFormat, "TWO_X_NL_X_NBBS_NH_HS"):
+    lmc_ops.GPUKVFormat.TWO_X_NL_X_NB_BS_NH_HS = \
+        lmc_ops.GPUKVFormat.TWO_X_NL_X_NBBS_NH_HS
+
 logger = init_logger(__name__)
 
 # Canonical recursive type consumed by :func:`normalize_kv_and_discover_format`

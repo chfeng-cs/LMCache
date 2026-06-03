@@ -543,7 +543,13 @@ class StorageManager:
             l2_result = l2_r  # Just to make linter happy
 
         total_hits = handle.l1_prefix_hit_count + l2_result
-        elapsed_ms = (time.monotonic() - handle.submit_time) * 1000
+        # Use true I/O completion time (not query time) to avoid inflating
+        # elapsed_ms when early_prefetch finishes before the scheduler polls.
+        done_time = getattr(self._prefetch_controller, "_last_completion_time", None)
+        if done_time is not None:
+            io_elapsed_ms = (done_time - handle.submit_time) * 1000
+        else:
+            io_elapsed_ms = (time.monotonic() - handle.submit_time) * 1000
 
         if total_hits > 0:
             logger.info(
@@ -556,7 +562,7 @@ class StorageManager:
                 handle.total_requested_keys,
                 handle.l1_prefix_hit_count,
                 l2_result,
-                elapsed_ms,
+                io_elapsed_ms,
                 handle.external_request_id,
                 handle.prefetch_request_id,
             )

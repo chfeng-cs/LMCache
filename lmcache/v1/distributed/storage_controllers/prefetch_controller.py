@@ -19,6 +19,7 @@ from typing import Iterable
 import enum
 import select
 import threading
+import time
 
 # First Party
 from lmcache.logging import init_logger
@@ -243,6 +244,7 @@ class PrefetchController(StorageControllerInterface):
         # Thread-safe prefetch results (background -> external)
         self._prefetch_results_lock = threading.Lock()
         self._completed_results: dict[PrefetchRequestId, int] = {}
+        self._completion_times: dict[PrefetchRequestId, float] = {}
 
         # Map eventfds to adapter indices for quick lookup in poll.
         # Relies on the L2AdapterInterface contract that every adapter
@@ -374,9 +376,13 @@ class PrefetchController(StorageControllerInterface):
         """
         with self._prefetch_results_lock:
             result = self._completed_results.pop(request_id, None)
+            done_time = self._completion_times.pop(request_id, None)
         if result is not None:
             with self._lookup_results_lock:
                 self._completed_lookups.pop(request_id, None)
+        # Attach completion time as attribute for callers that need true I/O time
+        if result is not None and done_time is not None:
+            self._last_completion_time = done_time
         return result
 
     def report_status(self) -> dict:
@@ -969,6 +975,7 @@ class PrefetchController(StorageControllerInterface):
         """Store the result and remove from in-flight tracking."""
         with self._prefetch_results_lock:
             self._completed_results[request_id] = prefix_hits
+            self._completion_times[request_id] = time.monotonic()
         removed = self._in_flight_requests.pop(request_id, None)
         if removed is not None:
             self._status_in_flight_count -= 1
